@@ -1,0 +1,19 @@
+model_name : 
+  Qwen3_base_0_6B : 
+    vocab_size : 151936
+    emb_dim : 1024
+    n_heads : 16
+    n_layers : 1
+    hidden_dim : 3072
+    head_dim : 128
+    qk_norm : True
+    n_kv_groups : 8
+    rope_base : 1000000
+    dtype : float32
+    context_length : 128
+
+tokenizer : 
+  path : tokenizer-base.json
+  use_chat_template : false
+
+
