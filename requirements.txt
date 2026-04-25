@@ -1,0 +1,12 @@
+torch
+lightning
+tokenizers
+PyYAML
+omegaconf
+numpy
+pandas
+pyarrow
+tqdm
+
+# Optional / environment-specific:
+# flash-attn
