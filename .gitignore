@@ -6,5 +6,6 @@ venv/
 checkpoints/
 weights/
 data/openweb/*.bin
+data/test_conversion_data/*.parquet
 wandb/
 .ipynb_checkpoints/
