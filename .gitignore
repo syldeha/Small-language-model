@@ -7,5 +7,7 @@ checkpoints/
 weights/
 data/openweb/*.bin
 data/test_conversion_data/*.parquet
+data/test_converstion_data/plain_text/*.parquet
+data/test_conversion_data/plain_text/*.parquet
 wandb/
 .ipynb_checkpoints/

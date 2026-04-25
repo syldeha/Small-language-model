@@ -1,4 +1,7 @@
+# Core ML dependencies with CUDA 12.1 support
 torch
+torchvision
+torchaudio
 lightning
 tokenizers
 PyYAML
@@ -8,5 +11,11 @@ pandas
 pyarrow
 tqdm
 
-# Optional / environment-specific:
-# flash-attn
+# Multi-GPU training optimization (H100 compatible)
+accelerate
+bfloat16
+einops
+
+# Optional / environment-specific (install separately if needed):
+# flash-attn  # For faster attention - pip install flash-attn
+# apex  # For mixed precision - pip install -v --disable-pip-version-check --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" git+https://github.com/NVIDIA/apex.git

@@ -3,22 +3,37 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from huggingface_hub import snapshot_download
 
 from model.tokenizer import Qwen3Tokenizer
 
 
-PARQUET_FILES = [
-    r"data\test_conversion_data\train-00000-of-00080.parquet",
-    r"data\test_conversion_data\train-00001-of-00080.parquet",
-]
+HF_DATASET_REPO = "Skylion007/openwebtext"
+LOCAL_PARQUET_DIR = Path("./data/test_converstion_data")
 
-
-OUTPUT_DIR = Path(r"F:\COURS IA\4A\PREPA INTERVIEW\AI CODING\AI\LLM projet\data\openweb")
+OUTPUT_DIR = Path("./data/openweb")
 TRAIN_BIN = OUTPUT_DIR / "train.bin"
 VAL_BIN = OUTPUT_DIR / "val.bin"
 
-TRAIN_RATIO = 0.999  # keep val small, like nanochat style
+TRAIN_RATIO = 0.999
 TEXT_COLUMNS_CANDIDATES = ["text", "content", "conversation", "messages"]
+
+
+def download_parquet_folder():
+    LOCAL_PARQUET_DIR.mkdir(parents=True, exist_ok=True)
+
+    snapshot_download(
+        repo_id=HF_DATASET_REPO,
+        repo_type="dataset",
+        local_dir=str(LOCAL_PARQUET_DIR),
+        allow_patterns=["*.parquet"],
+    )
+
+    parquet_files = sorted(LOCAL_PARQUET_DIR.rglob("*.parquet"))
+    if not parquet_files:
+        raise FileNotFoundError(f"No parquet files found in {LOCAL_PARQUET_DIR}")
+
+    return parquet_files
 
 
 def find_text_column(df: pd.DataFrame) -> str:
@@ -74,11 +89,7 @@ def tokenize_texts(texts, tokenizer):
 
 
 def write_bin(path: Path, token_array: np.ndarray):
-    if token_array.max() >= 2**16:
-        dtype = np.uint32
-    else:
-        dtype = np.uint16
-
+    dtype = np.uint32 if token_array.max() >= 2**16 else np.uint16
     arr = np.memmap(path, dtype=dtype, mode="w+", shape=(len(token_array),))
     arr[:] = token_array.astype(dtype)
     arr.flush()
@@ -87,10 +98,20 @@ def write_bin(path: Path, token_array: np.ndarray):
 
 if __name__ == "__main__":
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    # PARQUET_FILES = [
+    #     "data/test_conversion_data/plain_text/train-00000-of-00080.parquet",
+    #     # "data/test_conversion_data/train-00001-of-00080.parquet",
+    # ]
+    parquet_files = sorted(LOCAL_PARQUET_DIR.rglob("*.parquet"))
+
+
+    # print("Downloading parquet files from Hugging Face...")
+    # parquet_files = download_parquet_folder()
+    # print(f"Found {len(parquet_files)} parquet files")
 
     tokenizer = Qwen3Tokenizer()
 
-    texts = collect_texts(PARQUET_FILES)
+    texts = collect_texts(parquet_files)
     token_ids = tokenize_texts(texts, tokenizer)
 
     split_idx = int(len(token_ids) * TRAIN_RATIO)

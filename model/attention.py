@@ -1,7 +1,7 @@
 import torch
 from model.FFN import RMSNorm
 import torch.nn as nn
-from flash_attn import flash_attn_func,flash_attn_varlen_func
+# from flash_attn import flash_attn_func,flash_attn_varlen_func
 
 #approche_1
 def compute_rope_params(head_dim, theta_base=10_000, context_length=4096 , dtype=torch.float32):

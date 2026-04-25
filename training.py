@@ -2,6 +2,8 @@ from model.config_loader import load_config
 from model.utils import calc_loss_batch
 from model.qwen3Module import QwenModel
 from data.datamodule import QwenDataModule
+from lightning.pytorch.loggers import WandbLogger
+
 import  lightning as L
 import torch
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
@@ -16,6 +18,10 @@ config=load_config("configs/training_config.yaml")
 #     num_workers=config.dataset.dataloader_kwargs.num_workers,
 #     seed=config.setting.seed
 # )
+wandb_logger=WandbLogger(
+    project =config.setting.wandb_config.project , 
+    name=config.setting.wandb_config.name
+)
 dm = QwenDataModule(
     train_bin_path=config.dataset.train_bin_path,
     val_bin_path=config.dataset.val_bin_path,
@@ -51,11 +57,12 @@ trainer = L.Trainer(
     limit_val_batches=config.Trainer.limit_val_batches,
     log_every_n_steps=config.Trainer.log_every_n_steps,
     val_check_interval=config.Trainer.val_check_interval,
-    logger=config.Trainer.logger,
+    # logger=config.Trainer.logger,
     enable_checkpointing=config.Trainer.enable_checkpointing,
     default_root_dir=config.Trainer.default_root_dir,
     accumulate_grad_batches=config.Trainer.accumulate_grad_batches,
     precision=config.Trainer.precision,
+    logger=wandb_logger,
     callbacks=[checkpoint_callback, early_stopping_callback],
 )
 
