@@ -32,6 +32,7 @@ class QwenModel(L.LightningModule) :
 
 
     def training_step(self,batch, batch_idx) : 
+        # optim_adamw, optim_muon=self.optimizers()
         inputs, target= batch
         device=inputs.device
 
@@ -42,6 +43,14 @@ class QwenModel(L.LightningModule) :
         global_tokens=self.all_gather(local_tokens).sum()
 
         self.token_seen+=int(global_tokens.item())
+
+        # self.manual_backward(loss)
+        # optim_adamw.step()
+        # optim_muon.step()
+
+        # optim_adamw.zero_grad(set_to_none=True)
+        # optim_muon.zero_grad(set_to_none=True)
+
         self.log("token_seen" , float(self.token_seen), on_step=True, prog_bar=True, logger=True)
         self.log("train_loss" , loss, on_step=True, on_epoch=True,  prog_bar=True, logger=True)
 
@@ -75,34 +84,73 @@ class QwenModel(L.LightningModule) :
     #     )
 
 
-    def configure_optimizers(self):  #nanochat
-        weight_decay=self.config.training.optimizer_kwargs.weight_decay
-        learning_rate=self.config.training.lr_scheduler_kwargs.init_lr
-        betas=tuple(self.config.training.optimizer_kwargs.betas)
-        # start with all of the candidate parameters
-        param_dict = {pn: p for pn, p in self.named_parameters()}
-        # filter out those that do not require grad
-        param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
-        # create optim groups. Any parameters that is 2D will be weight decayed, otherwise no.
-        # i.e. all weight tensors in matmuls + embeddings decay, all biases and layernorms don't.
-        decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
-        nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
-        optim_groups = [
-            {'params': decay_params, 'weight_decay': weight_decay},
-            {'params': nodecay_params, 'weight_decay': 0.0}
-        ]
-        num_decay_params = sum(p.numel() for p in decay_params)
-        num_nodecay_params = sum(p.numel() for p in nodecay_params)
-        print(f"num decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters")
-        print(f"num non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters")
-        # Create AdamW optimizer and use the fused version if it is available
-        fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters
-        use_fused = fused_available and self.device == 'cuda'
-        extra_args = dict(fused=True) if use_fused else dict()
-        optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
-        print(f"using fused AdamW: {use_fused}")
+    # def configure_optimizers(self):  #nanochat
+    #     weight_decay=self.config.training.optimizer_kwargs.weight_decay
+    #     learning_rate=self.config.training.lr_scheduler_kwargs.init_lr
+    #     betas=tuple(self.config.training.optimizer_kwargs.betas)
+    #     # start with all of the candidate parameters
+    #     param_dict = {pn: p for pn, p in self.named_parameters()}
+    #     # filter out those that do not require grad
+    #     param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
+    #     # create optim groups. Any parameters that is 2D will be weight decayed, otherwise no.
+    #     # i.e. all weight tensors in matmuls + embeddings decay, all biases and layernorms don't.
 
-        return optimizer
+    #     decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
+    #     nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
+    #     optim_groups = [
+    #         {'params': decay_params, 'weight_decay': weight_decay},
+    #         {'params': nodecay_params, 'weight_decay': 0.0}
+    #     ]
+    #     num_decay_params = sum(p.numel() for p in decay_params)
+    #     num_nodecay_params = sum(p.numel() for p in nodecay_params)
+    #     print(f"num decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters")
+    #     print(f"num non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters")
+    #     # Create AdamW optimizer and use the fused version if it is available
+    #     fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters
+    #     use_fused = fused_available and self.device == 'cuda'
+    #     extra_args = dict(fused=True) if use_fused else dict()
+    #     optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
+    #     print(f"using fused AdamW: {use_fused}")
+
+        # return optimizer
+    def configure_optimizers(self) : 
+        adamw_params=self.config.training.optimizer_kwargs.adamw
+        muon_config=self.config.training.optimizer_kwargs.muon
+        param_dict={ pn:p for pn,p in self.named_parameters()}
+        param_dict={pn:p for pn,p in param_dict.items() if p.requires_grad}
+        muons_params={}
+        adamw_params={}
+
+        for pn,p in param_dict.items() : 
+            is_hidden_params=(
+                p.ndim<=2 
+                and "scale" not in pn 
+                and "tok_emb" not in pn
+                and "out_head" not in pn
+            )
+            if is_hidden_params : 
+                muons_params.append(p)
+            else : 
+                adamw_params.append(p)
+        optimizers_muon=torch.optim.muon(
+            muons_params, 
+            lr=muon_config.lr, 
+            weight_decay=muon_config.weight_decay,
+            momentum=muon_config.momentum, 
+            nesterov=muon_config.nesterov,
+            ns_steps=muon_config.ns_steps, 
+            adjust_lr_fn=muon_config.adjust_lr_fn
+
+        )
+
+        optimizers_adamw=torch.optim.AdamW(
+            adamw_params , 
+            lr=adamw_params.lr, 
+            betas=adamw_params.betas, 
+            weight_decay=adamw_params.weight_decay
+        )
+        return  [optimizers_adamw, optimizers_muon]
+        
     
 
     
