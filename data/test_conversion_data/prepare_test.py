@@ -1,125 +1,95 @@
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
+from datasets import load_dataset
 from tqdm import tqdm
-from huggingface_hub import snapshot_download
 
 from model.tokenizer import Qwen3Tokenizer
 
 
-HF_DATASET_REPO = "Skylion007/openwebtext"
-LOCAL_PARQUET_DIR = Path("./data/test_converstion_data")
-
+DATASET_NAME = "Skylion007/openwebtext"
 OUTPUT_DIR = Path("./data/openweb")
+CACHE_DIR = Path("./data/hf_cache")
+
 TRAIN_BIN = OUTPUT_DIR / "train.bin"
 VAL_BIN = OUTPUT_DIR / "val.bin"
 
-TRAIN_RATIO = 0.999
-TEXT_COLUMNS_CANDIDATES = ["text", "content", "conversation", "messages"]
+VAL_RATIO = 0.001
+SEED = 2357
+NUM_PROC = 8
+TOTAL_BATCHES_TO_WRITE = 1024
 
 
-def download_parquet_folder():
-    LOCAL_PARQUET_DIR.mkdir(parents=True, exist_ok=True)
-
-    snapshot_download(
-        repo_id=HF_DATASET_REPO,
-        repo_type="dataset",
-        local_dir=str(LOCAL_PARQUET_DIR),
-        allow_patterns=["*.parquet"],
-    )
-
-    parquet_files = sorted(LOCAL_PARQUET_DIR.rglob("*.parquet"))
-    if not parquet_files:
-        raise FileNotFoundError(f"No parquet files found in {LOCAL_PARQUET_DIR}")
-
-    return parquet_files
+def process(example):
+    ids = TOKENIZER.encode(example["text"])
+    ids.append(TOKENIZER.eos_token_id)
+    return {"ids": ids, "len": len(ids)}
 
 
-def find_text_column(df: pd.DataFrame) -> str:
-    for col in TEXT_COLUMNS_CANDIDATES:
-        if col in df.columns:
-            return col
-    raise ValueError(f"No text-like column found. Available columns: {list(df.columns)}")
+def choose_dtype(tokenized_split):
+    max_token_id = 0
+    for ids in tokenized_split["ids"]:
+        if ids:
+            local_max = max(ids)
+            if local_max > max_token_id:
+                max_token_id = local_max
+    return np.uint16 if max_token_id < 2**16 else np.uint32
 
 
-def normalize_example(value) -> str:
-    if value is None:
-        return ""
+def write_split_to_bin(dset, out_path: Path):
+    arr_len = np.sum(dset["len"], dtype=np.uint64)
+    if arr_len == 0:
+        raise ValueError(f"{out_path.name}: tokenized split is empty")
 
-    if isinstance(value, str):
-        return value
+    dtype = choose_dtype(dset)
+    arr = np.memmap(out_path, dtype=dtype, mode="w+", shape=(arr_len,))
 
-    if isinstance(value, list):
-        parts = []
-        for item in value:
-            if isinstance(item, dict):
-                role = item.get("role", "")
-                content = item.get("content", "")
-                parts.append(f"{role}: {content}".strip())
-            else:
-                parts.append(str(item))
-        return "\n".join(parts)
+    idx = 0
+    for batch_idx in tqdm(range(TOTAL_BATCHES_TO_WRITE), desc=f"writing {out_path.name}"):
+        shard = dset.shard(
+            num_shards=TOTAL_BATCHES_TO_WRITE,
+            index=batch_idx,
+            contiguous=True,
+        ).with_format("numpy")
 
-    if isinstance(value, dict):
-        return "\n".join(f"{k}: {v}" for k, v in value.items())
+        if len(shard) == 0:
+            continue
 
-    return str(value)
+        arr_batch = np.concatenate(shard["ids"])
+        arr[idx: idx + len(arr_batch)] = arr_batch
+        idx += len(arr_batch)
 
-
-def collect_texts(parquet_files):
-    texts = []
-    for parquet_path in parquet_files:
-        df = pd.read_parquet(parquet_path)
-        text_col = find_text_column(df)
-        for value in tqdm(df[text_col], desc=f"reading {Path(parquet_path).name}"):
-            text = normalize_example(value).strip()
-            if text:
-                texts.append(text)
-    return texts
-
-
-def tokenize_texts(texts, tokenizer):
-    all_ids = []
-    for text in tqdm(texts, desc="tokenizing"):
-        ids = tokenizer.encode(text)
-        ids.append(tokenizer.eos_token_id)
-        all_ids.extend(ids)
-    return np.array(all_ids, dtype=np.uint32)
-
-
-def write_bin(path: Path, token_array: np.ndarray):
-    dtype = np.uint32 if token_array.max() >= 2**16 else np.uint16
-    arr = np.memmap(path, dtype=dtype, mode="w+", shape=(len(token_array),))
-    arr[:] = token_array.astype(dtype)
     arr.flush()
-    print(f"wrote {path} with {len(token_array):,} tokens and dtype={dtype}")
+    print(f"wrote {out_path} with {arr_len:,} tokens and dtype={dtype}")
 
 
 if __name__ == "__main__":
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    # PARQUET_FILES = [
-    #     "data/test_conversion_data/plain_text/train-00000-of-00080.parquet",
-    #     # "data/test_conversion_data/train-00001-of-00080.parquet",
-    # ]
-    parquet_files = sorted(LOCAL_PARQUET_DIR.rglob("*.parquet"))
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+    TOKENIZER = Qwen3Tokenizer()
 
-    # print("Downloading parquet files from Hugging Face...")
-    # parquet_files = download_parquet_folder()
-    # print(f"Found {len(parquet_files)} parquet files")
+    dataset = load_dataset(
+        DATASET_NAME,
+        cache_dir=str(CACHE_DIR),
+    )
 
-    tokenizer = Qwen3Tokenizer()
+    split_dataset = dataset["train"].train_test_split(
+        test_size=VAL_RATIO,
+        seed=SEED,
+        shuffle=True,
+    )
+    split_dataset["val"] = split_dataset.pop("test")
 
-    texts = collect_texts(parquet_files)
-    token_ids = tokenize_texts(texts, tokenizer)
+    tokenized = split_dataset.map(
+        process,
+        remove_columns=["text"],
+        desc="tokenizing the splits",
+        num_proc=NUM_PROC,
+    )
 
-    split_idx = int(len(token_ids) * TRAIN_RATIO)
-    train_ids = token_ids[:split_idx]
-    val_ids = token_ids[split_idx:]
+    write_split_to_bin(tokenized["train"], TRAIN_BIN)
+    write_split_to_bin(tokenized["val"], VAL_BIN)
 
-    write_bin(TRAIN_BIN, train_ids)
-    write_bin(VAL_BIN, val_ids)
-
-    print(f"train tokens: {len(train_ids):,}")
-    print(f"val tokens:   {len(val_ids):,}")
+    print(f"train rows: {len(tokenized['train']):,}")
+    print(f"val rows:   {len(tokenized['val']):,}")
