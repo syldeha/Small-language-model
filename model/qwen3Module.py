@@ -4,8 +4,8 @@ import inspect
 from model.Qwen3 import Qwen3Model
 from model.tokenizer import Qwen3Tokenizer
 from model.utils import calc_loss_batch, generate_and_print_sample
-from model.config_loader import load_config
-from data.datamodule import QwenDataModule
+
+from model.muon import Muon
 from omegaconf import OmegaConf
 DTYPE_MAP={
     "float32": torch.float32, 
@@ -25,6 +25,7 @@ class QwenModel(L.LightningModule) :
         self.start_context=config.training.generate_sample.start_context
         self.context_length=config.model.context_length
         self.save_hyperparameters()
+        self.automatic_optimization=False
 
 
     def forward(self, inputs): 
@@ -32,7 +33,7 @@ class QwenModel(L.LightningModule) :
 
 
     def training_step(self,batch, batch_idx) : 
-        # optim_adamw, optim_muon=self.optimizers()
+        optim_adamw, optim_muon=self.optimizers()
         inputs, target= batch
         device=inputs.device
 
@@ -44,12 +45,12 @@ class QwenModel(L.LightningModule) :
 
         self.token_seen+=int(global_tokens.item())
 
-        # self.manual_backward(loss)
-        # optim_adamw.step()
-        # optim_muon.step()
+        self.manual_backward(loss)
+        optim_adamw.step()
+        optim_muon.step()
 
-        # optim_adamw.zero_grad(set_to_none=True)
-        # optim_muon.zero_grad(set_to_none=True)
+        optim_adamw.zero_grad(set_to_none=True)
+        optim_muon.zero_grad(set_to_none=True)
 
         self.log("token_seen" , float(self.token_seen), on_step=True, prog_bar=True, logger=True)
         self.log("train_loss" , loss, on_step=True, on_epoch=True,  prog_bar=True, logger=True)
@@ -114,12 +115,12 @@ class QwenModel(L.LightningModule) :
 
         # return optimizer
     def configure_optimizers(self) : 
-        adamw_params=self.config.training.optimizer_kwargs.adamw
+        adamw_config=self.config.training.optimizer_kwargs.adamw
         muon_config=self.config.training.optimizer_kwargs.muon
         param_dict={ pn:p for pn,p in self.named_parameters()}
         param_dict={pn:p for pn,p in param_dict.items() if p.requires_grad}
-        muons_params={}
-        adamw_params={}
+        muons_params=[]
+        adamw_params=[]
 
         for pn,p in param_dict.items() : 
             is_hidden_params=(
@@ -132,22 +133,21 @@ class QwenModel(L.LightningModule) :
                 muons_params.append(p)
             else : 
                 adamw_params.append(p)
-        optimizers_muon=torch.optim.muon(
+        optimizers_muon=Muon(
             muons_params, 
             lr=muon_config.lr, 
             weight_decay=muon_config.weight_decay,
             momentum=muon_config.momentum, 
             nesterov=muon_config.nesterov,
             ns_steps=muon_config.ns_steps, 
-            adjust_lr_fn=muon_config.adjust_lr_fn
 
         )
 
         optimizers_adamw=torch.optim.AdamW(
             adamw_params , 
-            lr=adamw_params.lr, 
-            betas=adamw_params.betas, 
-            weight_decay=adamw_params.weight_decay
+            lr=adamw_config.lr, 
+            betas=adamw_config.betas, 
+            weight_decay=adamw_config.weight_decay
         )
         return  [optimizers_adamw, optimizers_muon]
         

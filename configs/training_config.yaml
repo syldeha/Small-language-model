@@ -54,10 +54,9 @@ training :
     muon : 
       weight_decay : 0.1
       lr : 6.0e-4
-      momentum : 0.95, 
-      nesterov : True, 
-      ns_steps : 5, 
-      adjust_lr_fn : "match_rms_adamw"
+      momentum : 0.95
+      nesterov : True 
+      ns_steps : 5
 
   # save_path : weights/
 
@@ -89,7 +88,7 @@ Trainer :
   enable_checkpointing: True
   default_root_dir: ./checkpoints/
   devices : 1 #8
-  accumulate_grad_batches : 8
+  accumulate_grad_batches : 1
   precision : 32
 
   checkpoint : 
