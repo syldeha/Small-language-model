@@ -6,21 +6,21 @@ setting :
     CUDA_VISIBLE_DEVICES : 0
     device : "cpu" # "cuda"
   wandb_config: 
-    project : LLMProject
+    project : LLMProject_medium
     name : Qwen3_base
 
 
 model : 
   vocab_size : 151936
-  emb_dim : 256 #1024
-  n_heads : 8 #16
-  n_layers : 2 #28
-  hidden_dim : 512 #3072
+  emb_dim : 512 #1024
+  n_heads : 16 #16
+  n_layers : 16 #28
+  hidden_dim : 3072 #3072
   head_dim : 64 #128
   qk_norm : True
-  n_kv_groups : 4
+  n_kv_groups : 8
   rope_base : 1000000
-  dtype : float32
+  dtype : bfloat16
   context_length : 128 #512 #2048
 #model to use : 
   # model_by_path : model/Qwen_modelc
@@ -31,8 +31,8 @@ model :
 
 training :
   generate_sample:
-    start_context : "New york city is "
-  load_checkpoint : ./checkpoints/last.ckpt
+    start_context : "Cameroun is  "
+  load_checkpoint : ./checkpoints_medium/last.ckpt
 
 # le
   lr_scheduler_kwargs: 
@@ -83,10 +83,10 @@ Trainer :
   max_steps : 500000
   log_every_n_steps: 10
   val_check_interval: 1000
-  limit_val_batches : 250
+  limit_val_batches : 50
   logger : True
   enable_checkpointing: True
-  default_root_dir: ./checkpoints/
+  default_root_dir: ./checkpoints_medium/
   devices : 1 #8
   accumulate_grad_batches : 1
   precision : 32

@@ -123,6 +123,7 @@ class GroupQueryAttention(nn.Module) :
         self.W_value=nn.Linear(d_in , num_kv_groups*self.head_dim, bias=False , dtype=dtype)
 
         self.out_proj=nn.Linear( self.d_out, d_in, bias=False, dtype=dtype)
+        self.out_proj.weight.data.zero_() #zero_init
 
         if qk_norm : 
             self.q_norm=RMSNorm(head_dim, eps=1e-6)
@@ -200,6 +201,7 @@ class FlashGroupQueryAttention(nn.Module) :
         self.W_value=nn.Linear(d_in , num_kv_groups*self.head_dim, bias=False , dtype=dtype)
 
         self.out_proj=nn.Linear( self.d_out, d_in, bias=False, dtype=dtype)
+        self.out_proj.weight.data.zero_()
 
         if qk_norm : 
             self.q_norm=RMSNorm(head_dim, eps=1e-6)

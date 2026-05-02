@@ -13,14 +13,14 @@ setting :
 model : 
   vocab_size : 151936
   emb_dim : 256 #1024
-  n_heads : 16
-  n_layers : 1 #28
+  n_heads : 8 #16
+  n_layers : 2 #28
   hidden_dim : 512 #3072
   head_dim : 64 #128
   qk_norm : True
-  n_kv_groups : 8
+  n_kv_groups : 4
   rope_base : 1000000
-  dtype : bfloat16
+  dtype : float32
   context_length : 128 #512 #2048
 #model to use : 
   # model_by_path : model/Qwen_modelc
@@ -31,8 +31,8 @@ model :
 
 training :
   generate_sample:
-    start_context : "Where is new york?"
-  load_checkpoint : ./checkpoints/last-v1.ckpt
+    start_context : "New york city is "
+  load_checkpoint : ./checkpoints/last.ckpt
 
 # le
   lr_scheduler_kwargs: 
@@ -66,7 +66,7 @@ dataset :
   train_bin_path : data/openweb/train.bin
   val_bin_path : data/openweb/val.bin
   dataloader_kwargs : 
-    batch_size : 8
+    batch_size : 32
     num_workers: 0
     max_length : 128 
     stride : 128 #2048
@@ -80,10 +80,10 @@ dataset :
 
 Trainer : 
   # max_epochs: 2
-  max_steps : 5000 #500000
-  log_every_n_steps: 1 #10
-  val_check_interval: 100 #10000
-  limit_val_batches : 20 #200
+  max_steps : 500000
+  log_every_n_steps: 10
+  val_check_interval: 1000
+  limit_val_batches : 250
   logger : True
   enable_checkpointing: True
   default_root_dir: ./checkpoints/

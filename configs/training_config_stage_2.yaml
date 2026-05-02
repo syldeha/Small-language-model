@@ -4,7 +4,7 @@ setting :
     WANDB_API_KEY: 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
     WANDB_RUN_ID: ~
     CUDA_VISIBLE_DEVICES : 0
-    device : "cpu" # "cuda"
+    device : "cuda" # "cuda"
   wandb_config: 
     project : LLMProject
     name : Qwen3_base
@@ -21,7 +21,7 @@ model :
   n_kv_groups : 4
   rope_base : 1000000
   dtype : float32
-  context_length : 128 #512 #2048
+  context_length : 256 #512 #2048
 #model to use : 
   # model_by_path : model/Qwen_modelc
   kwargs: 
@@ -32,7 +32,7 @@ model :
 training :
   generate_sample:
     start_context : "New york city is "
-  load_checkpoint : ./checkpoints/last.ckpt
+  load_checkpoint : ./checkpoints/last_stage_1.ckpt
 
 # le
   lr_scheduler_kwargs: 
@@ -68,8 +68,8 @@ dataset :
   dataloader_kwargs : 
     batch_size : 32
     num_workers: 0
-    max_length : 128 
-    stride : 128 #2048
+    max_length : 256 
+    stride : 256 #2048
 
   # train_data : 
   # valid_data : 
@@ -80,13 +80,13 @@ dataset :
 
 Trainer : 
   # max_epochs: 2
-  max_steps : 500000
+  max_steps : 50000
   log_every_n_steps: 10
-  val_check_interval: 1000
-  limit_val_batches : 250
+  val_check_interval: 500
+  limit_val_batches : 50
   logger : True
   enable_checkpointing: True
-  default_root_dir: ./checkpoints/
+  default_root_dir: ./checkpoints_stage_2/
   devices : 1 #8
   accumulate_grad_batches : 1
   precision : 32

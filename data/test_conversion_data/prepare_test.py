@@ -1,4 +1,6 @@
 from pathlib import Path
+import os
+NUM_PROC = max(1, os.cpu_count()// 2)
 
 import numpy as np
 from datasets import load_dataset
@@ -14,9 +16,9 @@ CACHE_DIR = Path("./data/hf_cache")
 TRAIN_BIN = OUTPUT_DIR / "train.bin"
 VAL_BIN = OUTPUT_DIR / "val.bin"
 
-VAL_RATIO = 0.001
+VAL_RATIO = 0.005
 SEED = 2357
-NUM_PROC = 8
+# NUM_PROC = 8
 TOTAL_BATCHES_TO_WRITE = 1024
 
 
@@ -26,14 +28,14 @@ def process(example):
     return {"ids": ids, "len": len(ids)}
 
 
-def choose_dtype(tokenized_split):
-    max_token_id = 0
-    for ids in tokenized_split["ids"]:
-        if ids:
-            local_max = max(ids)
-            if local_max > max_token_id:
-                max_token_id = local_max
-    return np.uint16 if max_token_id < 2**16 else np.uint32
+# def choose_dtype(tokenized_split):
+#     max_token_id = 0
+#     for ids in tokenized_split["ids"]:
+#         if ids:
+#             local_max = max(ids)
+#             if local_max > max_token_id:
+#                 max_token_id = local_max
+#     return np.uint16 if max_token_id < 2**16 else np.uint32
 
 
 def write_split_to_bin(dset, out_path: Path):
@@ -41,7 +43,7 @@ def write_split_to_bin(dset, out_path: Path):
     if arr_len == 0:
         raise ValueError(f"{out_path.name}: tokenized split is empty")
 
-    dtype = choose_dtype(dset)
+    dtype = np.uint32
     arr = np.memmap(out_path, dtype=dtype, mode="w+", shape=(arr_len,))
 
     idx = 0

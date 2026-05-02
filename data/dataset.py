@@ -13,7 +13,7 @@ class MemTokenDataset(IterableDataset) :
 
 
     def __iter__(self): 
-        data=np.memmap(self.bin_path, dtype=np.uint16, mode='r')
+        data=np.memmap(self.bin_path, dtype=np.uint32, mode='r')
         max_start=len(data)-self.context_length-1
 
         while True: 

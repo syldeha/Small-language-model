@@ -11,3 +11,6 @@ data/test_converstion_data/plain_text/*.parquet
 data/test_conversion_data/plain_text/*.parquet
 wandb/
 .ipynb_checkpoints/
+checkpoints_medium/
+checkpoints_stage_2/
+data/hf_cache

@@ -1,5 +1,6 @@
 import lightning as L
 import torch 
+import math
 import inspect
 from model.Qwen3 import Qwen3Model
 from model.tokenizer import Qwen3Tokenizer
@@ -34,6 +35,7 @@ class QwenModel(L.LightningModule) :
 
     def training_step(self,batch, batch_idx) : 
         optim_adamw, optim_muon=self.optimizers()
+        scheduler_adamw , scheduler_muon=self.lr_schedulers()
         inputs, target= batch
         device=inputs.device
 
@@ -51,7 +53,11 @@ class QwenModel(L.LightningModule) :
 
         optim_adamw.zero_grad(set_to_none=True)
         optim_muon.zero_grad(set_to_none=True)
+        scheduler_adamw.step()
+        scheduler_muon.step()
 
+        self.log("lr_adamw", scheduler_adamw.get_last_lr()[0], on_step=True, prog_bar=True)
+        self.log("lr_muon", scheduler_muon.get_last_lr()[0], on_step=True, prog_bar=True)
         self.log("token_seen" , float(self.token_seen), on_step=True, prog_bar=True, logger=True)
         self.log("train_loss" , loss, on_step=True, on_epoch=True,  prog_bar=True, logger=True)
 
@@ -119,6 +125,7 @@ class QwenModel(L.LightningModule) :
         muon_config=self.config.training.optimizer_kwargs.muon
         param_dict={ pn:p for pn,p in self.named_parameters()}
         param_dict={pn:p for pn,p in param_dict.items() if p.requires_grad}
+
         muons_params=[]
         adamw_params=[]
 
@@ -149,7 +156,30 @@ class QwenModel(L.LightningModule) :
             betas=adamw_config.betas, 
             weight_decay=adamw_config.weight_decay
         )
-        return  [optimizers_adamw, optimizers_muon]
+
+        total_steps=self.config.training.lr_scheduler_kwargs.total_steps
+        warmup_steps=self.config.training.lr_scheduler_kwargs.warmup_steps
+        init_lr=self.config.training.lr_scheduler_kwargs.init_lr
+        min_lr=self.config.training.lr_scheduler_kwargs.min_lr
+
+        def lr_lambda(step) : 
+            if step < warmup_steps:
+                return step /max(1, warmup_steps)
+            
+            progress=(step - warmup_steps) / max(1, total_steps- warmup_steps)
+            cosine=0.5*(1.0 +math.cos(math.pi*progress))
+            min_ratio=min_lr/init_lr
+            return min_ratio +(1.0-min_ratio)*cosine
+
+        scheduler_adamw=torch.optim.lr_scheduler.LambdaLR(
+            optimizers_adamw,
+            lr_lambda,
+        )
+        scheduler_muon=torch.optim.lr_scheduler.LambdaLR(
+            optimizers_muon, 
+            lr_lambda,
+        )
+        return  [optimizers_adamw, optimizers_muon] , [scheduler_adamw, scheduler_muon]
         
     
 

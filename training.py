@@ -8,7 +8,7 @@ import  lightning as L
 import torch
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 
-config=load_config("configs/training_config.yaml")
+config=load_config("configs/training_config_stage_1_medium.yaml")
 
 # dm=QwenDataModule(
 #     text_data_path=config.dataset.dataset_by_path, 
@@ -63,8 +63,30 @@ trainer = L.Trainer(
     accumulate_grad_batches=config.Trainer.accumulate_grad_batches,
     precision=config.Trainer.precision,
     logger=wandb_logger,
-    callbacks=[checkpoint_callback, early_stopping_callback],
+    callbacks=[checkpoint_callback],
 )
 
-# trainer.fit(model, datamodule=dm, ckpt_path=config.training.load_checkpoint)
-trainer.fit(model, datamodule=dm)
+trainer.fit(
+    model,
+    datamodule=dm,
+    ckpt_path=config.training.load_checkpoint,
+    weights_only=False,
+)
+
+
+
+# trainer.fit(model, datamodule=dm)
+
+
+# # TRAIN THE MODEL ON A SECOND STAGE 
+# checkpoints_path=config.training.load_checkpoint
+# checkpoint=torch.load(checkpoints_path, map_location="cuda", weights_only=False)
+
+# state_dict=checkpoint['state_dict']
+# # clean_state_dict={
+# #     k.removeprefix("model.") : v for k,v in state_dict.items() if k.startswith('model.')
+# # }
+
+# model.load_state_dict(state_dict)
+
+# trainer.fit(model, datamodule=dm)

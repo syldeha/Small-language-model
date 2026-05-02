@@ -76,7 +76,58 @@ def generate_text_stream (model ,idx, max_new_tokens,tokenizer, context_length,d
 
 
     return idx
-          
+
+def generate_text_stream_top_k (model ,idx, max_new_tokens,tokenizer, context_length,device, top_k=5, temperature=0.5) : 
+    """
+    idx : (n_batch , n_tokens)
+
+    """
+    model.eval()
+    model.to(device)
+    idx=idx.to(device)
+    generate_count=0
+    start_time=time.time()
+    print("Input_text: \n ")
+    print(tokenizer.decode(idx[0].tolist()), end="")
+    print("\n ")
+    for _ in range(max_new_tokens) : 
+        idx_cond=idx[:, -context_length:]
+        logits=model(idx_cond)[:,-1,:]
+        if top_k is not None: 
+            top_logits, _=torch.topk(logits, top_k)
+            min_val=top_logits[:,-1]
+            logits=torch.where(
+                logits< min_val , 
+                # torch.tensor(float('-inf')).to(logits.device),  recreates the tensor every steps better use torch.full_likes
+                torch.full_like(logits, float("-inf")),
+                logits
+            )
+        if temperature > 0.0 : 
+            logits=logits/temperature
+            probs=torch.softmax(logits, dim=-1)
+            idx_new=torch.multinomial(probs, num_samples=1)
+        else : 
+            idx_new=torch.argmax(logits, dim=-1, keepdim=True)
+
+        if idx_new.item()== tokenizer.eos_token_id : 
+            break
+        generate_count+=1
+        idx=torch.cat([idx, idx_new], dim=1)
+
+        #print
+        print(tokenizer.decode(idx_new[0].tolist()), end="" , flush=True)
+
+    elapsed=time.time()-start_time
+    tok_per_sec=generate_count/elapsed if elapsed> 0 else None
+
+    print('\n')
+    print(tokenizer.decode(idx[0].tolist()))
+    print(f"\n time {elapsed:.2f} sec")
+    print(f" Tokens/sec {tok_per_sec:.2f}")
+
+
+    return idx
+        
 
 def text_to_token_ids(text, tokenizer): 
     """
@@ -161,14 +212,13 @@ def generate_and_print_sample(model, tokenizer, device, start_context, context_l
     encoded=text_to_token_ids(start_context,tokenizer).to(device)
 
     with torch.no_grad():
-        token_ids=generate_text_stream(
+        token_ids=generate_text_stream_top_k(
             model=model, 
             idx=encoded,
             max_new_tokens=50, 
             context_length=context_length,
             tokenizer=tokenizer,
             device=device
-
                       )
         decoded_text=token_ids_to_text(token_ids, tokenizer)
         print(decoded_text.replace("\n"," "))
